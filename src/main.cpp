@@ -2,6 +2,8 @@
 #include <Wire.h>
 #include <JY901.h>
 #include <U8g2lib.h>
+#include <esp_now.h>
+#include <WiFi.h>
 
 /* 引脚参数 */
 #define bendsensor1 32
@@ -35,6 +37,50 @@ float gyro_x, gyro_y, gyro_z; //角速度
 float angle_x, angle_y, angle_z; //角度
 float blend1, blend2, blend3, blend4, blend5; //弯曲角度
 
+/* ESP-NOW 通信相关参数 */
+// 接收器地址：C0:49:EF:B2:77:38
+uint8_t broadcastAddress[] = { 0xC0, 0x49, 0xEF, 0xB2, 0x77, 0x38 };
+
+// 信息结构
+typedef struct struct_message {
+  int id;              // must be unique for each sender board
+  int order;           // must be unique for each bag
+  int curvature[5];    // The corresponding curvature of the five fingers
+  int eulerAngles[3];  // The Euler angle of the palm in space
+} struct_message;
+int bag_order = 0;     // The order of the current bag
+struct_message myData; // The data to send
+
+esp_now_peer_info_t peerInfo;
+
+// 信息发送回调函数
+void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
+  Serial.print("\r\nLast Packet Send Status:\t");
+  Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Delivery Success\n" : "Delivery Fail\n");
+}
+
+// 初始化 ESP-NOW 
+void InitESPNow() {
+  WiFi.mode(WIFI_STA);
+  if (esp_now_init() != ESP_OK) {
+    Serial.println("Error initializing ESP-NOW");
+    return;
+  }
+  Serial.println("Initialized ESP-NOW");
+
+  // Register peer
+  memcpy(peerInfo.peer_addr, broadcastAddress, 6);
+  peerInfo.channel = 0;  
+  peerInfo.encrypt = false;
+
+  // Add peer        
+  if (esp_now_add_peer(&peerInfo) != ESP_OK){
+    Serial.println("Failed to add peer");
+    return;
+  }
+  // Register for a callback function that will be called when data is sent
+  esp_now_register_send_cb(OnDataSent);
+}
 
 //控制RGB颜色
 void setRGB(int r, int g, int b){
@@ -157,6 +203,9 @@ void setup() {
 
   //打开jy901的IIC通道
   JY901.StartIIC();
+
+  //初始化ESP-NOW
+  InitESPNow();
 
   //设置引脚模式
   pinMode(bendsensor1, INPUT);

@@ -35,6 +35,107 @@ float gyro_x, gyro_y, gyro_z; //角速度
 float angle_x, angle_y, angle_z; //角度
 float blend1, blend2, blend3, blend4, blend5; //弯曲角度
 
+
+//控制RGB颜色
+void setRGB(int r, int g, int b){
+  analogWrite(led_R, r);
+  analogWrite(led_G, g); 
+  analogWrite(led_B, b);
+}
+
+//在OLED上打印字符串
+void printOLED(const char* str, int x = 60, int y = 40){
+  u8g2.firstPage();
+  do {
+    u8g2.setFont(u8g2_font_wqy15_t_gb2312);
+    u8g2.drawUTF8(x, y, str);
+  } while (u8g2.nextPage());
+  delay(500);
+}
+
+//获取姿态初始参数以及弯曲角度映射范围，用以消除偏移量
+void getInitValue(){
+
+  //获取方位角度初始偏移量
+  state = "正在获取方位偏移";
+  printOLED(state,0);
+  
+  JY901.GetAngle();
+  angle_x_init = (float)JY901.stcAngle.Angle[0]/32768*180;
+  angle_y_init = (float)JY901.stcAngle.Angle[1]/32768*180;
+  angle_z_init = (float)JY901.stcAngle.Angle[2]/32768*180;
+  
+  //将结果合并成一行，打印在串口
+  Serial.println("angle_x_init: " + String(angle_x_init) + " angle_y_init: " + String(angle_y_init) + " angle_z_init: " + String(angle_z_init));
+
+  delay(1000);
+
+  //获取弯曲角度映射范围
+  state = "正在获取弯曲范围";
+  printOLED(state,0);
+  delay(1000);
+  state = "请伸直手指";
+  printOLED(state,20);
+  delay(1000);
+  blend1_min = analogRead(bendsensor1);
+  blend2_min = analogRead(bendsensor2);
+  blend3_min = analogRead(bendsensor3);
+  blend4_min = analogRead(bendsensor4);
+  blend5_min = analogRead(bendsensor5);
+
+  //将结果合并成一行，打印在串口
+  Serial.println("blend1_min: " + String(blend1_min) + " blend2_min: " + String(blend2_min) + " blend3_min: " + String(blend3_min) + " blend4_min: " + String(blend4_min) + " blend5_min: " + String(blend5_min));
+  
+  delay(1000);
+
+  state = "请弯曲手指90度";
+  printOLED(state,20);
+  delay(1000);
+  blend1_max = analogRead(bendsensor1);
+  blend2_max = analogRead(bendsensor2);
+  blend3_max = analogRead(bendsensor3);
+  blend4_max = analogRead(bendsensor4);
+  blend5_max = analogRead(bendsensor5);
+  delay(1000);
+
+  //将结果合并成一行，打印在串口
+  Serial.println("blend1_max: " + String(blend1_max) + " blend2_max: " + String(blend2_max) + " blend3_max: " + String(blend3_max) + " blend4_max: " + String(blend4_max) + " blend5_max: " + String(blend5_max));
+
+  state = "完成校准";
+  printOLED(state,30);
+  delay(1000);
+}
+
+//获取运动姿态
+void getMotionValue(){
+  JY901.GetAcc();
+  acc_x = (float)JY901.stcAcc.a[0]/32768*16;
+  acc_y = (float)JY901.stcAcc.a[1]/32768*16;
+  acc_z = (float)JY901.stcAcc.a[2]/32768*16;
+  Serial.println("acc_x: " + String(acc_x) + " acc_y: " + String(acc_y) + " acc_z: " + String(acc_z));
+  
+  JY901.GetGyro();
+  gyro_x = (float)JY901.stcGyro.w[0]/32768*2000;
+  gyro_y = (float)JY901.stcGyro.w[1]/32768*2000;
+  gyro_z = (float)JY901.stcGyro.w[2]/32768*2000;
+  Serial.println("gyro_x: " + String(gyro_x) + " gyro_y: " + String(gyro_y) + " gyro_z: " + String(gyro_z));
+
+  
+  JY901.GetAngle();
+  angle_x = (float)JY901.stcAngle.Angle[0]/32768*180 - angle_x_init;
+  angle_y = (float)JY901.stcAngle.Angle[1]/32768*180 - angle_y_init;
+  angle_z = (float)JY901.stcAngle.Angle[2]/32768*180 - angle_z_init;
+  Serial.println("angle_x: " + String(angle_x) + " angle_y: " + String(angle_y) + " angle_z: " + String(angle_z));
+  
+  blend1 = map(analogRead(bendsensor1), blend1_min, blend1_max, 0, 90);
+  blend2 = map(analogRead(bendsensor2), blend2_min, blend2_max, 0, 90);
+  blend3 = map(analogRead(bendsensor3), blend3_min, blend3_max, 0, 90);
+  blend4 = map(analogRead(bendsensor4), blend4_min, blend4_max, 0, 90);
+  blend5 = map(analogRead(bendsensor5), blend5_min, blend5_max, 0, 90);
+  Serial.println("blend1: " + String(blend1) + " blend2: " + String(blend2) + " blend3: " + String(blend3) + " blend4: " + String(blend4) + " blend5: " + String(blend5));
+  Serial.println();
+}
+
 void setup() {
   
   //打开串口
@@ -70,151 +171,12 @@ void setup() {
   //获取姿态初始参数以及弯曲角度映射范围，用以消除偏移量
   getInitValue();
 
-
+  state = "工作中";
+  printOLED(state,20);
 }
 
 void loop() {
-  u8g2.firstPage();
-  do {
-    u8g2.setFont(u8g2_font_wqy15_t_gb2312);
-    u8g2.drawUTF8(60, 40, state);
-  } while (u8g2.nextPage());
-  delay(200);
-  //Obtain the curvature of five fingers , Store in frame data
-  float val1 = analogRead(bendsensor1);
-  float val2 = analogRead(bendsensor2);
-  float val3 = analogRead(bendsensor3);
-  float val4 = analogRead(bendsensor4);
-  float val5 = analogRead(bendsensor5);
-
-  Serial.print("val1: " + String(val1));
-  Serial.print(" ");
-  Serial.print("val2: " + String(val2));
-  Serial.print(" ");
-  Serial.print("val3: " + String(val3));
-  Serial.print(" ");
-  Serial.print("val4: " + String(val4));
-  Serial.print(" ");
-  Serial.print("val5: " + String(val5));
-
-  Serial.println("");
-
-  JY901.GetAcc();
-  Serial.print("Acc:");
-  Serial.print((float)JY901.stcAcc.a[0]/32768*16);
-  Serial.print(" ");
-  Serial.print((float)JY901.stcAcc.a[1]/32768*16);
-  Serial.print(" ");
-  Serial.println((float)JY901.stcAcc.a[2]/32768*16);
-  
-  JY901.GetGyro();  
-  Serial.print("Gyro:");
-  Serial.print((float)JY901.stcGyro.w[0]/32768*2000);
-  Serial.print(" ");
-  Serial.print((float)JY901.stcGyro.w[1]/32768*2000);
-  Serial.print(" ");
-  Serial.println((float)JY901.stcGyro.w[2]/32768*2000);
-  
-  JY901.GetAngle();
-  Serial.print("Angle:");
-  Serial.print((float)JY901.stcAngle.Angle[0]/32768*180);
-  Serial.print(" ");
-  Serial.print((float)JY901.stcAngle.Angle[1]/32768*180);
-  Serial.print(" ");
-  Serial.println((float)JY901.stcAngle.Angle[2]/32768*180);
-  
-  Serial.println("");
-  delay(200);
-
-}
-
-//控制RGB颜色
-void setRGB(int r, int g, int b){
-  analogWrite(led_R, r);
-  analogWrite(led_G, g); 
-  analogWrite(led_B, b);
-}
-
-//在OLED上打印字符串
-void printOLED(const char* str, int x = 60, int y = 40){
-  u8g2.firstPage();
-  do {
-    u8g2.setFont(u8g2_font_wqy15_t_gb2312);
-    u8g2.drawUTF8(x, y, str);
-  } while (u8g2.nextPage());
+  setRGB(0,255,0);
+  getMotionValue();
   delay(500);
-}
-
-//获取姿态初始参数以及弯曲角度映射范围，用以消除偏移量
-void getInitValue(){
-
-  //获取方位角度初始偏移量
-  state = "正在获取方位角偏移量";
-  printOLED(state);
-  
-  JY901.GetAngle();
-  angle_x_init = (float)JY901.stcAngle.Angle[0]/32768*180;
-  angle_y_init = (float)JY901.stcAngle.Angle[1]/32768*180;
-  angle_z_init = (float)JY901.stcAngle.Angle[2]/32768*180;
-  
-  //将结果合并成一行，打印在串口
-  Serial.println("angle_x_init: " + String(angle_x_init) + " angle_y_init: " + String(angle_y_init) + " angle_z_init: " + String(angle_z_init));
-
-  delay(1000);
-
-  //获取弯曲角度映射范围
-  state = "正在获取弯曲映射范围...";
-  printOLED(state);
-  state = "请伸直手指";
-  printOLED(state);
-  blend1_min = analogRead(bendsensor1);
-  blend2_min = analogRead(bendsensor2);
-  blend3_min = analogRead(bendsensor3);
-  blend4_min = analogRead(bendsensor4);
-  blend5_min = analogRead(bendsensor5);
-
-  //将结果合并成一行，打印在串口
-  Serial.println("blend1_min: " + String(blend1_min) + " blend2_min: " + String(blend2_min) + " blend3_min: " + String(blend3_min) + " blend4_min: " + String(blend4_min) + " blend5_min: " + String(blend5_min));
-  
-  delay(1000);
-
-  state = "请弯曲手指";
-  printOLED(state);
-  blend1_max = analogRead(bendsensor1);
-  blend2_max = analogRead(bendsensor2);
-  blend3_max = analogRead(bendsensor3);
-  blend4_max = analogRead(bendsensor4);
-  blend5_max = analogRead(bendsensor5);
-  delay(1000);
-
-  //将结果合并成一行，打印在串口
-  Serial.println("blend1_max: " + String(blend1_max) + " blend2_max: " + String(blend2_max) + " blend3_max: " + String(blend3_max) + " blend4_max: " + String(blend4_max) + " blend5_max: " + String(blend5_max));
-
-  state = "完成校准";
-  printOLED(state);
-  delay(1000);
-}
-
-//获取运动姿态
-void getMotionValue(){
-  JY901.GetAcc();
-  acc_x = (float)JY901.stcAcc.a[0]/32768*16;
-  acc_y = (float)JY901.stcAcc.a[1]/32768*16;
-  acc_z = (float)JY901.stcAcc.a[2]/32768*16;
-  
-  JY901.GetGyro();
-  gyro_x = (float)JY901.stcGyro.w[0]/32768*2000;
-  gyro_y = (float)JY901.stcGyro.w[1]/32768*2000;
-  gyro_z = (float)JY901.stcGyro.w[2]/32768*2000;
-  
-  JY901.GetAngle();
-  angle_x = (float)JY901.stcAngle.Angle[0]/32768*180 - angle_x_init;
-  angle_y = (float)JY901.stcAngle.Angle[1]/32768*180 - angle_y_init;
-  angle_z = (float)JY901.stcAngle.Angle[2]/32768*180 - angle_z_init;
-  
-  blend1 = map(analogRead(bendsensor1), blend1_min, blend1_max, 0, 90);
-  blend2 = map(analogRead(bendsensor2), blend2_min, blend2_max, 0, 90);
-  blend3 = map(analogRead(bendsensor3), blend3_min, blend3_max, 0, 90);
-  blend4 = map(analogRead(bendsensor4), blend4_min, blend4_max, 0, 90);
-  blend5 = map(analogRead(bendsensor5), blend5_min, blend5_max, 0, 90);
 }

@@ -24,7 +24,7 @@ TwoWire I2C_JY901 = TwoWire(0);
 TwoWire I2C_OLED = TwoWire(1);
 
 /* Oled 实例化 */
-U8G2_SH1106_128X64_NONAME_F_SW_I2C u8g2(U8G2_R0, /* clock=*/OLED_SCL, /* data=*/OLED_SDA, /* reset=*/U8X8_PIN_NONE);  // SDA:21 scl:22
+U8G2_SSD1306_128X64_NONAME_F_SW_I2C u8g2(U8G2_R0, /* clock=*/OLED_SCL, /* data=*/OLED_SDA, /* reset=*/U8X8_PIN_NONE);  // SDA:21 scl:22
 const char* state = "FxxK";
 
 /* 运动参数初始值 */
@@ -43,7 +43,7 @@ uint8_t broadcastAddress[] = { 0xC0, 0x49, 0xEF, 0xB2, 0x77, 0x38 };
 
 // 信息结构
 typedef struct struct_message {
-  int id;              // must be unique for each sender board
+  int board_id;              // must be unique for each sender board
   int order;           // must be unique for each bag
   int curvature[5];    // The corresponding curvature of the five fingers
   int eulerAngles[3];  // The Euler angle of the palm in space
@@ -180,6 +180,23 @@ void getMotionValue(){
   blend5 = map(analogRead(bendsensor5), blend5_min, blend5_max, 0, 90);
   Serial.println("blend1: " + String(blend1) + " blend2: " + String(blend2) + " blend3: " + String(blend3) + " blend4: " + String(blend4) + " blend5: " + String(blend5));
   Serial.println();
+}
+
+//将运动数据封装为struct_message结构体，并使用ESP-NOW发送
+void sendMotionValue(){
+  myData.board_id = 1;
+  myData.order = bag_order;
+  myData.curvature[0] = blend1;
+  myData.curvature[1] = blend2;
+  myData.curvature[2] = blend3;
+  myData.curvature[3] = blend4;
+  myData.curvature[4] = blend5;
+  myData.eulerAngles[0] = angle_x;
+  myData.eulerAngles[1] = angle_y;
+  myData.eulerAngles[2] = angle_z;
+  esp_err_t result = esp_now_send(broadcastAddress, (uint8_t *) &myData, sizeof(myData));
+  Serial.println("Send Status: " + String(result == ESP_OK ? "Success" : "Fail"));
+  bag_order++;
 }
 
 void setup() {
